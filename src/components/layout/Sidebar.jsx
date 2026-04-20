@@ -2,7 +2,7 @@ import React, { useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Receipt, ArrowLeftRight,
-  LogOut, X, SplitSquareVertical,
+  LogOut, X, SplitSquareVertical, MessageSquare,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useAuth } from '../../hooks/useAuth';
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: '/groups',      label: 'Groups',       icon: Users           },
   { to: '/expenses',    label: 'Expenses',     icon: Receipt         },
   { to: '/settlements', label: 'Settlements',  icon: ArrowLeftRight  },
+  { to: '/dms',         label: 'Personal DMs', icon: MessageSquare   },
 ];
 
 /**

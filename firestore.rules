@@ -26,6 +26,24 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ── DMs collection ───────────────────────────────────────────
+    match /dms/{dmId} {
+      allow read, write: if isSignedIn() &&
+        resource.data.participantUids.hasAny([request.auth.uid]);
+
+      // Allow create (resource is null, so use request.resource)
+      allow create: if isSignedIn() &&
+        request.resource.data.participantUids.hasAny([request.auth.uid]);
+
+      match /messages/{msgId} {
+        allow read, write: if isSignedIn();
+      }
+
+      match /balanceHistory/{date} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
     // ── Groups collection ─────────────────────────────────────────
     match /groups/{groupId} {
       allow read:   if isSignedIn();

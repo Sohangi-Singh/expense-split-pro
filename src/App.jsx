@@ -12,7 +12,9 @@ const DashboardPage    = lazy(() => import('./pages/DashboardPage'));
 const GroupsPage       = lazy(() => import('./pages/GroupsPage'));
 const GroupDetailPage  = lazy(() => import('./pages/GroupDetailPage'));
 const ExpensesPage     = lazy(() => import('./pages/ExpensesPage'));
-const SettlementsPage  = lazy(() => import('./pages/SettlementsPage'));
+const SettlementsPage       = lazy(() => import('./pages/SettlementsPage'));
+const DMsPage               = lazy(() => import('./pages/DMsPage'));
+const DMConversationPage    = lazy(() => import('./pages/DMConversationPage'));
 
 // ── Guard: redirect to /login if not authenticated ───────────────────
 function ProtectedRoute({ children }) {
@@ -54,6 +56,8 @@ export default function App() {
           <Route path="/groups/:groupId"  element={<GroupDetailPage />} />
           <Route path="/expenses"         element={<ExpensesPage />} />
           <Route path="/settlements"      element={<SettlementsPage />} />
+          <Route path="/dms"              element={<DMsPage />} />
+          <Route path="/dms/:dmId"        element={<DMConversationPage />} />
         </Route>
 
         {/* Catch-all */}

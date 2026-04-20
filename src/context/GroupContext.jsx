@@ -54,7 +54,7 @@ export function GroupProvider({ children }) {
 
   // ── Create a new group ─────────────────────────────────────────
   const createGroup = useCallback(async (groupData) => {
-    if (!user) return;
+    if (!user) throw new Error('You must be logged in to create a group.');
     const newId = await svcCreate({
       ...groupData,
       creatorUid:   user.uid,

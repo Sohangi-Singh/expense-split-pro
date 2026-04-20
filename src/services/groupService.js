@@ -1,6 +1,6 @@
 import {
   collection, doc, addDoc, getDoc, getDocs,
-  updateDoc, deleteDoc, query, where,
+  updateDoc, setDoc, deleteDoc, query, where,
   serverTimestamp, arrayUnion, arrayRemove,
 } from 'firebase/firestore';
 import { db } from './firebase';
@@ -10,9 +10,21 @@ function randomInviteCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
+// ── Helpers ───────────────────────────────────────────────────────
+function withTimeout(promise, ms = 10000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(
+        'Firestore timed out. Make sure your Firestore database is created in Firebase Console → Build → Firestore Database.'
+      )), ms)
+    ),
+  ]);
+}
+
 // ── Create ────────────────────────────────────────────────────────
 export async function createGroup({ name, description = '', category = 'Other', creatorUid, creatorName, creatorEmail }) {
-  const groupRef = await addDoc(collection(db, 'groups'), {
+  const groupRef = await withTimeout(addDoc(collection(db, 'groups'), {
     name,
     description,
     category,
@@ -23,33 +35,26 @@ export async function createGroup({ name, description = '', category = 'Other', 
       { uid: creatorUid, name: creatorName, email: creatorEmail, role: 'admin' },
     ],
     totalExpenses: 0,
-  });
+  }));
 
-  // Add groupId to the creator's user doc
-  await updateDoc(doc(db, 'users', creatorUid), {
+  // Add groupId to the creator's user doc.
+  // Use setDoc+merge so it works even if the user doc was never created during signup.
+  await setDoc(doc(db, 'users', creatorUid), {
     groups: arrayUnion(groupRef.id),
-  });
+    uid:    creatorUid,
+    email:  creatorEmail,
+    name:   creatorName,
+  }, { merge: true });
 
   return groupRef.id;
 }
 
 // ── Read: all groups the user belongs to ──────────────────────────
 export async function fetchUserGroups(uid) {
-  // Query groups where the members array contains an entry with this uid
-  const q = query(
-    collection(db, 'groups'),
-    where('members', 'array-contains-any', [
-      { uid, role: 'admin' },
-      { uid, role: 'member' },
-    ])
-  );
-
-  // Firestore array-contains-any with objects is unreliable across SDKs,
-  // so we also fall back to fetching the user doc's groups array.
+  // Read the user doc for their group ID list.
+  // If it doesn't exist yet (e.g. first login before any group created) return [].
   const userSnap = await getDoc(doc(db, 'users', uid));
-  if (!userSnap.exists()) return [];
-
-  const groupIds = userSnap.data().groups || [];
+  const groupIds = userSnap.exists() ? (userSnap.data().groups || []) : [];
   if (groupIds.length === 0) return [];
 
   // Batch fetch (Firestore getDoc per id is fine for small counts)
@@ -94,9 +99,9 @@ export async function addMemberByEmail(groupId, email) {
   await updateDoc(doc(db, 'groups', groupId), {
     members: arrayUnion(newMember),
   });
-  await updateDoc(doc(db, 'users', userDoc.id), {
+  await setDoc(doc(db, 'users', userDoc.id), {
     groups: arrayUnion(groupId),
-  });
+  }, { merge: true });
 
   return newMember;
 }
@@ -115,7 +120,7 @@ export async function joinGroupByCode(inviteCode, uid, name, email) {
 
   const newMember = { uid, name, email, role: 'member' };
   await updateDoc(doc(db, 'groups', groupDoc.id), { members: arrayUnion(newMember) });
-  await updateDoc(doc(db, 'users', uid), { groups: arrayUnion(groupDoc.id) });
+  await setDoc(doc(db, 'users', uid), { groups: arrayUnion(groupDoc.id) }, { merge: true });
 
   return { id: groupDoc.id, ...groupData };
 }

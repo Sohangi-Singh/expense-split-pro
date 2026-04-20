@@ -5,55 +5,65 @@ import React, {
   useCallback,
   useMemo,
 } from 'react';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import { getUserProfile, signIn, signUp, logOut, subscribeToAuthChanges } from '../services/authService';
 
 export const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null);   // Firebase Auth user object
-  const [profile, setProfile] = useState(null);   // Firestore user document
-  const [loading, setLoading] = useState(true);   // true while checking persisted session
+  const [user,    setUser]    = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // ── Listen to Firebase Auth state changes ─────────────────────────
-  // onAuthStateChanged fires immediately with the current user (or null),
-  // which gives us persistent login across page refreshes.
   useEffect(() => {
     const unsubscribe = subscribeToAuthChanges(async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        // Load the richer Firestore profile (name, groups, etc.)
-        const userProfile = await getUserProfile(firebaseUser.uid);
-        setProfile(userProfile);
-      } else {
-        setUser(null);
-        setProfile(null);
+      // Always call setLoading(false) — wrap everything in try/finally
+      try {
+        if (firebaseUser) {
+          setUser(firebaseUser);
+
+          let userProfile = await getUserProfile(firebaseUser.uid);
+
+          // Auto-create the Firestore user doc if it's missing
+          // (can happen if signup's setDoc failed, or on first login)
+          if (!userProfile) {
+            await setDoc(doc(db, 'users', firebaseUser.uid), {
+              uid:       firebaseUser.uid,
+              name:      firebaseUser.displayName || firebaseUser.email?.split('@')[0] || '',
+              email:     firebaseUser.email || '',
+              groups:    [],
+              createdAt: serverTimestamp(),
+            }, { merge: true });
+            userProfile = await getUserProfile(firebaseUser.uid);
+          }
+
+          setProfile(userProfile);
+        } else {
+          setUser(null);
+          setProfile(null);
+        }
+      } catch (err) {
+        // If Firestore is unreachable or rules block us, still unblock the UI
+        console.error('[AuthContext] Error during auth state change:', err);
+        if (firebaseUser) setUser(firebaseUser);
+      } finally {
+        // This ALWAYS runs — prevents the app from being stuck on the loading screen
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    // Cleanup listener on unmount
     return unsubscribe;
   }, []);
 
-  // ── Auth actions wrapped in useCallback for stable references ─────
   const login = useCallback(async (email, password) => {
-    setLoading(true);
-    try {
-      const firebaseUser = await signIn(email, password);
-      return firebaseUser;
-    } finally {
-      setLoading(false);
-    }
+    const firebaseUser = await signIn(email, password);
+    return firebaseUser;
   }, []);
 
   const register = useCallback(async (name, email, password) => {
-    setLoading(true);
-    try {
-      const firebaseUser = await signUp(name, email, password);
-      return firebaseUser;
-    } finally {
-      setLoading(false);
-    }
+    const firebaseUser = await signUp(name, email, password);
+    return firebaseUser;
   }, []);
 
   const logout = useCallback(async () => {
@@ -62,14 +72,8 @@ export function AuthProvider({ children }) {
     setProfile(null);
   }, []);
 
-  // ── Memoize context value to avoid unnecessary re-renders ─────────
   const value = useMemo(() => ({
-    user,
-    profile,
-    loading,
-    login,
-    register,
-    logout,
+    user, profile, loading, login, register, logout,
   }), [user, profile, loading, login, register, logout]);
 
   return (
