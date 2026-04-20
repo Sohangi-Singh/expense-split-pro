@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ───────────────────────────────────────────────────
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return request.auth.uid == uid;
+    }
+
+    function isGroupMember(groupId) {
+      let group = get(/databases/$(database)/documents/groups/$(groupId));
+      return isSignedIn() &&
+             group.data.members.hasAny([{ uid: request.auth.uid, role: 'admin' },
+                                         { uid: request.auth.uid, role: 'member' }]);
+    }
+
+    // ── Users collection ──────────────────────────────────────────
+    match /users/{userId} {
+      allow read:   if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    // ── Groups collection ─────────────────────────────────────────
+    match /groups/{groupId} {
+      allow read:   if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isGroupMember(groupId);
+      allow delete: if isSignedIn() &&
+                       get(/databases/$(database)/documents/groups/$(groupId)).data.createdBy == request.auth.uid;
+
+      // ── Expenses sub-collection ───────────────────────────────
+      match /expenses/{expenseId} {
+        allow read, write: if isGroupMember(groupId);
+      }
+
+      // ── Settlements sub-collection ────────────────────────────
+      match /settlements/{settlementId} {
+        allow read, write: if isGroupMember(groupId);
+      }
+    }
+  }
+}
